@@ -170,9 +170,9 @@ function FlowChart({ hourly }) {
   const x = (i) => pad.left + i * ((width - pad.left - pad.right) / (chartLabels.length - 1))
   const y = (value) => pad.top + (max - value) * ((height - pad.top - pad.bottom) / max)
   const series = [
-    { key: 'calls', label: '架電件数', color: '#2d67a3', values: hourly.calls },
-    { key: 'voicemail', label: '留守電', color: '#8795a8', values: hourly.voicemail },
-    { key: 'positive', label: 'アポ決定 + 資料請求 + 予定確認', color: '#ff654d', values: hourly.positive },
+    { key: 'calls', label: '架電件数', color: '#6d4aff', values: hourly.calls },
+    { key: 'voicemail', label: '留守電', color: '#a695e8', values: hourly.voicemail },
+    { key: 'positive', label: '成果見込み', color: '#c7b9ff', values: hourly.positive },
   ]
   return <div className="chart-wrap">
     <div className="chart-legend">{series.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}</div>
