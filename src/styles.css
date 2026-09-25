@@ -120,7 +120,7 @@ h1 { font-size: clamp(27px, 3vw, 37px); letter-spacing: -.05em; line-height: 1.2
 .quick-log { padding: 19px 15px; }
 .result-pad { min-height: 100%; }
 .result-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
-.result-button { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid transparent; border-radius: 9px; padding: 10px 11px; color: #fff; font-size: 11px; font-weight: 700; text-align: left; transition: transform .15s ease, box-shadow .15s ease; touch-action: manipulation; }
+.result-button { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid transparent; border-radius: 9px; padding: 10px 11px; color: #fff; font-size: 11px; font-weight: 700; text-align: left; transition: transform .15s ease, box-shadow .15s ease; touch-action: none; user-select: none; }
 .result-button:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(36,62,91,.15); }
 .result-button:active { transform: scale(.98); }
 .result-button strong { font-size: 22px; line-height: 1; }

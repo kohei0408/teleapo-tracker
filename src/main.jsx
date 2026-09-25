@@ -17,6 +17,11 @@ const formatShortDate = (dayKey) => {
   const date = new Date(`${dayKey}T00:00:00`)
   return `${date.getMonth() + 1}/${date.getDate()}`
 }
+const shiftDateKey = (dayKey, offset) => {
+  const date = new Date(`${dayKey}T00:00:00`)
+  date.setDate(date.getDate() + offset)
+  return getTodayKey(date)
+}
 
 const emptyDayState = (dayKey = getTodayKey()) => ({
   dayKey,
@@ -186,11 +191,72 @@ function FollowUpTable({ rows, statusFilter, setStatusFilter, onPhone, onMail, o
   </section>
 }
 
-function ResultPad({ resultCounts, onResult, onDoubleResult }) {
+function ResultPad({ resultCounts, onResult, onDoubleResult, onSlideResult }) {
+  const gestureRef = useRef(null)
+  const suppressClickRef = useRef(false)
+  const suppressClickTimerRef = useRef(null)
+  const suppressDoubleClickUntilRef = useRef(0)
+
+  const stopRepeat = () => {
+    if (gestureRef.current?.repeatTimer) window.clearInterval(gestureRef.current.repeatTimer)
+    if (gestureRef.current) gestureRef.current.repeatTimer = null
+  }
+
+  useEffect(() => () => {
+    stopRepeat()
+    if (suppressClickTimerRef.current) window.clearTimeout(suppressClickTimerRef.current)
+  }, [])
+
+  const startSlide = (event, result) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    gestureRef.current = { pointerId: event.pointerId, result, startY: event.clientY, direction: 0, moved: false, repeatTimer: null }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  const moveSlide = (event, result) => {
+    const gesture = gestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId || gesture.result !== result) return
+    const distance = gesture.startY - event.clientY
+    const direction = Math.abs(distance) >= 22 ? (distance > 0 ? 1 : -1) : 0
+    if (!direction || direction === gesture.direction) return
+    gesture.direction = direction
+    gesture.moved = true
+    event.preventDefault()
+    onSlideResult(result, direction)
+    stopRepeat()
+    gesture.repeatTimer = window.setInterval(() => onSlideResult(result, direction), 70)
+  }
+
+  const endSlide = (event) => {
+    const gesture = gestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    if (gesture.moved) {
+      suppressClickRef.current = true
+      suppressDoubleClickUntilRef.current = Date.now() + 350
+      if (suppressClickTimerRef.current) window.clearTimeout(suppressClickTimerRef.current)
+      suppressClickTimerRef.current = window.setTimeout(() => { suppressClickRef.current = false }, 500)
+    }
+    stopRepeat()
+    gestureRef.current = null
+  }
+
+  const handleClick = (result) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    onResult(result)
+  }
+
+  const handleDoubleClick = (result) => {
+    if (Date.now() < suppressDoubleClickUntilRef.current) return
+    onDoubleResult(result)
+  }
+
   return <aside className="quick-log result-pad">
     <div className="section-heading"><h2>架電結果を記録</h2></div>
-    <div className="result-buttons">{resultOptions.map((option) => <button key={option.value} className={`result-button ${option.tone}`} onClick={() => onResult(option.value)} onDoubleClick={() => onDoubleResult(option.value)} aria-label={`${option.label}を記録。現在${resultCounts[option.value]}件`}><span>{option.label}</span><strong>{resultCounts[option.value]}</strong></button>)}</div>
-    <p className="form-hint">どの結果ボタンでも架電件数が1件増えるで。記録内容はこの端末に自動保存されるわ。</p>
+    <div className="result-buttons">{resultOptions.map((option) => <button key={option.value} className={`result-button ${option.tone}`} onClick={() => handleClick(option.value)} onDoubleClick={() => handleDoubleClick(option.value)} onPointerDown={(event) => startSlide(event, option.value)} onPointerMove={(event) => moveSlide(event, option.value)} onPointerUp={endSlide} onPointerCancel={endSlide} aria-label={`${option.label}を記録。現在${resultCounts[option.value]}件`}><span>{option.label}</span><strong>{resultCounts[option.value]}</strong></button>)}</div>
+    <p className="form-hint">1回タップで加算、ダブルタップで1件減算。押したまま上にスライドで高速加算、下にスライドで高速減算。記録内容はこの端末に自動保存されるわ。</p>
   </aside>
 }
 
@@ -219,26 +285,23 @@ function HistoryDetail({ record, onClose }) {
   </div>
 }
 
-function Dashboard({ state, onResult, onDoubleResult, onComplete, onPhone, onMail, onJumpToResultPad, onOpenHistory }) {
+function Dashboard({ state, onResult, onDoubleResult, onSlideResult, onComplete, onPhone, onMail, onJumpToResultPad, onOpenHistory }) {
   const [filter, setFilter] = useState('すべて')
   const [chartDateKey, setChartDateKey] = useState(state.dayKey)
   const filteredRows = useMemo(() => filter === 'すべて' ? state.followUps : state.followUps.filter((row) => row.status === filter), [filter, state.followUps])
   const dateRecords = [state, ...(state.history || [])]
-  const dateKeys = dateRecords.map((record) => record.dayKey)
-  const chartIndex = Math.max(0, dateKeys.indexOf(chartDateKey))
-  const chartRecord = dateRecords.find((record) => record.dayKey === chartDateKey) || state
-  const olderDateKey = dateKeys[chartIndex + 1]
-  const newerDateKey = dateKeys[chartIndex - 1]
+  const chartRecord = dateRecords.find((record) => record.dayKey === chartDateKey) || emptyDayState(chartDateKey)
+  const canMoveNewer = chartDateKey < state.dayKey
 
   useEffect(() => {
-    if (!dateKeys.includes(chartDateKey)) setChartDateKey(state.dayKey)
-  }, [state.dayKey, state.history, chartDateKey])
+    if (chartDateKey > state.dayKey) setChartDateKey(state.dayKey)
+  }, [state.dayKey, chartDateKey])
 
   return <>
     <div className="title-row"><div><h1>{formatShortDate(state.dayKey)} 架電記録</h1><p>{state.dateLabel}</p></div><div className="title-actions"><AppointmentRateCard record={state} onOpen={onOpenHistory} /><button className="primary-button desktop-record" onClick={onJumpToResultPad}><Icon name="plus" size={18} />結果を記録</button></div></div>
     <MetricGrid metrics={state.metrics} resultCounts={state.resultCounts} />
-    <section className="flow-panel"><div className="section-heading chart-heading"><div className="date-nav"><button className="date-nav-button previous" onClick={() => olderDateKey && setChartDateKey(olderDateKey)} disabled={!olderDateKey} aria-label="前の日付"><Icon name="arrow" size={16} /></button><h2>{formatShortDate(chartRecord.dayKey)} 架電記録</h2><button className="date-nav-button" onClick={() => newerDateKey && setChartDateKey(newerDateKey)} disabled={!newerDateKey} aria-label="次の日付"><Icon name="arrow" size={16} /></button></div></div><FlowChart hourly={chartRecord.hourly} /></section>
-    <div className="work-grid"><FollowUpTable rows={filteredRows} statusFilter={filter} setStatusFilter={setFilter} onPhone={onPhone} onMail={onMail} onComplete={onComplete} /><ResultPad resultCounts={state.resultCounts} onResult={onResult} onDoubleResult={onDoubleResult} /></div>
+    <section className="flow-panel"><div className="section-heading chart-heading"><div className="date-nav"><button className="date-nav-button previous" onClick={() => setChartDateKey((current) => shiftDateKey(current, -1))} aria-label="前の日付"><Icon name="arrow" size={16} /></button><h2>{formatShortDate(chartRecord.dayKey)} 架電記録</h2><button className="date-nav-button" onClick={() => canMoveNewer && setChartDateKey((current) => shiftDateKey(current, 1))} disabled={!canMoveNewer} aria-label="次の日付"><Icon name="arrow" size={16} /></button></div></div><FlowChart hourly={chartRecord.hourly} /></section>
+    <div className="work-grid"><FollowUpTable rows={filteredRows} statusFilter={filter} setStatusFilter={setFilter} onPhone={onPhone} onMail={onMail} onComplete={onComplete} /><ResultPad resultCounts={state.resultCounts} onResult={onResult} onDoubleResult={onDoubleResult} onSlideResult={onSlideResult} /></div>
     <HistorySection history={state.history} onOpen={onOpenHistory} />
   </>
 }
@@ -278,7 +341,7 @@ function App() {
 
   const notify = (message) => { setToast(message); window.setTimeout(() => setToast(''), 2200) }
 
-  const updateResultCount = (result, direction) => {
+  const updateResultCount = (result, direction, { notifyUser = true } = {}) => {
     setState((previous) => {
       const current = previous.resultCounts[result] || 0
       if (direction < 0 && current === 0) return previous
@@ -297,7 +360,7 @@ function App() {
       }
       return { ...previous, metrics, resultCounts, hourly, followUps, lastSaved: currentTime() }
     })
-    notify(direction > 0 ? '架電結果を保存したで' : '直前の結果を1件戻したで')
+    if (notifyUser) notify(direction > 0 ? '架電結果を保存したで' : '直前の結果を1件戻したで')
   }
 
   const handleResultTap = (result) => {
@@ -321,6 +384,8 @@ function App() {
     updateResultCount(result, -1)
   }
 
+  const handleResultSlide = (result, direction) => updateResultCount(result, direction, { notifyUser: false })
+
   const completeFollowUp = (row) => {
     setState((previous) => ({ ...previous, followUps: previous.followUps.map((item) => item.id === row.id ? { ...item, status: '完了' } : item), lastSaved: currentTime() }))
     notify(`${row.company}を完了にしたで`)
@@ -332,7 +397,7 @@ function App() {
     if (activeNav === 'followups') return <FollowUpView state={state} onComplete={completeFollowUp} onPhone={(row) => actionToast(`${row.company}へ電話する準備やで`)} onMail={(row) => actionToast(`${row.company}へのメールを開くで`)} />
     if (activeNav === 'history') return <HistoryView history={state.history} onOpen={openDetail} />
     if (activeNav === 'report') return <ReportView state={state} />
-    return <Dashboard state={state} onResult={handleResultTap} onDoubleResult={handleResultDoubleTap} onComplete={completeFollowUp} onPhone={(row) => actionToast(`${row.company}へ電話する準備やで`)} onMail={(row) => actionToast(`${row.company}へのメールを開くで`)} onJumpToResultPad={() => document.querySelector('.result-pad')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} onOpenHistory={openDetail} />
+    return <Dashboard state={state} onResult={handleResultTap} onDoubleResult={handleResultDoubleTap} onSlideResult={handleResultSlide} onComplete={completeFollowUp} onPhone={(row) => actionToast(`${row.company}へ電話する準備やで`)} onMail={(row) => actionToast(`${row.company}へのメールを開くで`)} onJumpToResultPad={() => document.querySelector('.result-pad')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} onOpenHistory={openDetail} />
   }
 
   return <div className="app-shell"><aside className={mobileMenuOpen ? 'sidebar open' : 'sidebar'}><div className="brand">TELENOTE</div><nav>{navItems.map((item) => <button key={item.id} className={activeNav === item.id ? 'nav-item active' : 'nav-item'} onClick={() => { setActiveNav(item.id); setMobileMenuOpen(false) }}><Icon name={item.icon} size={20} /><span>{item.label}</span></button>)}</nav><div className="sidebar-footer"><span className="save-dot" />自動保存オン</div></aside>
