@@ -65,6 +65,9 @@ h1 { font-size: clamp(27px, 3vw, 37px); letter-spacing: -.05em; line-height: 1.2
 .flow-panel { padding: 17px 19px 12px; margin-bottom: 20px; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .section-heading h2 { font-size: 19px; letter-spacing: -.04em; }
+.section-heading-actions { display: flex; align-items: center; gap: 8px; }
+.edit-toggle { border: 1px solid #cbd8e6; background: #fff; color: #55718f; border-radius: 7px; padding: 6px 10px; font-size: 11px; font-weight: 700; }
+.edit-toggle.active { border-color: #214971; background: #214971; color: #fff; }
 .chart-heading { justify-content: flex-start; }
 .date-nav { display: inline-flex; align-items: center; gap: 10px; }
 .date-nav h2 { min-width: 142px; text-align: center; }
@@ -103,6 +106,11 @@ h1 { font-size: clamp(27px, 3vw, 37px); letter-spacing: -.05em; line-height: 1.2
 .priority.high { color: #e95452; background: #ffeaeb; }
 .priority.medium { color: #c67c14; background: #fff2d9; }
 .priority.low { color: #3975cc; background: #e8f0ff; }
+.priority-select, .edit-input { border: 1px solid #cbd8e6; border-radius: 6px; background: #fff; color: #405a78; padding: 6px 7px; font-size: 10px; outline: none; }
+.priority-select:focus, .edit-input:focus { border-color: #7d9fbd; box-shadow: 0 0 0 2px rgba(45,103,163,.1); }
+.priority-select { min-width: 45px; }
+.company-input { width: 135px; }
+.person-input { width: 92px; }
 .status { display: inline-flex; align-items: center; gap: 6px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); display: inline-block; }
 .status-dot.today { background: #f59b22; }

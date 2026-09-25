@@ -169,7 +169,8 @@ function StatusDot({ status }) {
   return <span className={`status-dot ${status === '完了' ? 'done' : status === '今日対応' ? 'today' : ''}`} aria-hidden="true" />
 }
 
-function FollowUpTable({ rows, statusFilter, setStatusFilter, onPhone, onMail, onComplete }) {
+function FollowUpTable({ rows, statusFilter, setStatusFilter, onPhone, onMail, onComplete, onUpdateRow }) {
+  const [editMode, setEditMode] = useState(false)
   const filters = [
     { label: 'すべて', value: 'すべて' },
     { label: '未対応', value: '未対応' },
@@ -177,13 +178,13 @@ function FollowUpTable({ rows, statusFilter, setStatusFilter, onPhone, onMail, o
     { label: '完了', value: '完了' },
   ]
   return <section className="followup-panel">
-    <div className="section-heading with-action"><h2>折り返し対応</h2><span className="section-count">{rows.length}件</span></div>
+    <div className="section-heading with-action"><h2>折り返し対応</h2><div className="section-heading-actions"><span className="section-count">{rows.length}件</span><button className={editMode ? 'edit-toggle active' : 'edit-toggle'} onClick={() => setEditMode((current) => !current)}>{editMode ? '編集を終了' : '編集'}</button></div></div>
     <div className="filter-tabs" role="tablist" aria-label="折り返し対応の絞り込み">
       {filters.map((filter) => <button key={filter.value} className={statusFilter === filter.value ? 'filter-tab active' : 'filter-tab'} onClick={() => setStatusFilter(filter.value)}>{filter.label}{filter.value !== 'すべて' && <span>{rows.filter((row) => row.status === filter.value).length}</span>}</button>)}
     </div>
     <div className="followup-table-wrap">
       <table className="followup-table"><thead><tr><th>優先度</th><th>会社名</th><th>担当者</th><th>前回の通話</th><th>次回対応予定</th><th>ステータス</th><th>アクション</th></tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.id}><td><span className={`priority ${row.priority === '高' ? 'high' : row.priority === '中' ? 'medium' : 'low'}`}>{row.priority}</span></td><td className="company-cell"><strong>{row.company}</strong><small>{row.note}</small></td><td>{row.person}</td><td>{row.previous}</td><td>{row.next}</td><td><span className="status"><StatusDot status={row.status} />{row.status}</span></td><td><div className="row-actions"><button className="row-button primary" onClick={() => onPhone(row)}><Icon name="phone" size={14} />電話する</button><button className="row-button" onClick={() => onMail(row)}><Icon name="mail" size={14} />メール</button><button className="row-button" onClick={() => onComplete(row)}><Icon name="check" size={14} />完了にする</button></div></td></tr>)}</tbody>
+        <tbody>{rows.map((row) => <tr key={row.id}><td>{editMode ? <select className="priority-select" aria-label={`${row.company}の優先度`} value={row.priority} onChange={(event) => onUpdateRow(row.id, { priority: event.target.value })}>{['高', '中', '低'].map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select> : <span className={`priority ${row.priority === '高' ? 'high' : row.priority === '中' ? 'medium' : 'low'}`}>{row.priority}</span>}</td><td className="company-cell">{editMode ? <><input className="edit-input company-input" aria-label={`${row.company}の会社名`} value={row.company} onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} /><small>{row.note}</small></> : <><strong>{row.company}</strong><small>{row.note}</small></>}</td><td>{editMode ? <input className="edit-input person-input" aria-label={`${row.person}の担当者名`} value={row.person} onChange={(event) => onUpdateRow(row.id, { person: event.target.value })} /> : row.person}</td><td>{row.previous}</td><td>{row.next}</td><td><span className="status"><StatusDot status={row.status} />{row.status}</span></td><td><div className="row-actions"><button className="row-button primary" onClick={() => onPhone(row)}><Icon name="phone" size={14} />電話する</button><button className="row-button" onClick={() => onMail(row)}><Icon name="mail" size={14} />メール</button><button className="row-button" onClick={() => onComplete(row)}><Icon name="check" size={14} />完了にする</button></div></td></tr>)}</tbody>
       </table>
       {rows.length === 0 && <div className="empty-state">このステータスの対応はないで。</div>}
     </div>
@@ -285,7 +286,7 @@ function HistoryDetail({ record, onClose }) {
   </div>
 }
 
-function Dashboard({ state, onResult, onDoubleResult, onSlideResult, onComplete, onPhone, onMail, onJumpToResultPad, onOpenHistory }) {
+function Dashboard({ state, onResult, onDoubleResult, onSlideResult, onComplete, onPhone, onMail, onUpdateRow, onJumpToResultPad, onOpenHistory }) {
   const [filter, setFilter] = useState('すべて')
   const [chartDateKey, setChartDateKey] = useState(state.dayKey)
   const filteredRows = useMemo(() => filter === 'すべて' ? state.followUps : state.followUps.filter((row) => row.status === filter), [filter, state.followUps])
@@ -301,15 +302,15 @@ function Dashboard({ state, onResult, onDoubleResult, onSlideResult, onComplete,
     <div className="title-row"><div><h1>{formatShortDate(state.dayKey)} 架電記録</h1><p>{state.dateLabel}</p></div><div className="title-actions"><AppointmentRateCard record={state} onOpen={onOpenHistory} /><button className="primary-button desktop-record" onClick={onJumpToResultPad}><Icon name="plus" size={18} />結果を記録</button></div></div>
     <MetricGrid metrics={state.metrics} resultCounts={state.resultCounts} />
     <section className="flow-panel"><div className="section-heading chart-heading"><div className="date-nav"><button className="date-nav-button previous" onClick={() => setChartDateKey((current) => shiftDateKey(current, -1))} aria-label="前の日付"><Icon name="arrow" size={16} /></button><h2>{formatShortDate(chartRecord.dayKey)} 架電記録</h2><button className="date-nav-button" onClick={() => canMoveNewer && setChartDateKey((current) => shiftDateKey(current, 1))} disabled={!canMoveNewer} aria-label="次の日付"><Icon name="arrow" size={16} /></button></div></div><FlowChart hourly={chartRecord.hourly} /></section>
-    <div className="work-grid"><FollowUpTable rows={filteredRows} statusFilter={filter} setStatusFilter={setFilter} onPhone={onPhone} onMail={onMail} onComplete={onComplete} /><ResultPad resultCounts={state.resultCounts} onResult={onResult} onDoubleResult={onDoubleResult} onSlideResult={onSlideResult} /></div>
+    <div className="work-grid"><FollowUpTable rows={filteredRows} statusFilter={filter} setStatusFilter={setFilter} onPhone={onPhone} onMail={onMail} onComplete={onComplete} onUpdateRow={onUpdateRow} /><ResultPad resultCounts={state.resultCounts} onResult={onResult} onDoubleResult={onDoubleResult} onSlideResult={onSlideResult} /></div>
     <HistorySection history={state.history} onOpen={onOpenHistory} />
   </>
 }
 
-function FollowUpView({ state, onComplete, onPhone, onMail }) {
+function FollowUpView({ state, onComplete, onPhone, onMail, onUpdateRow }) {
   const [filter, setFilter] = useState('すべて')
   const rows = filter === 'すべて' ? state.followUps : state.followUps.filter((row) => row.status === filter)
-  return <div className="standalone-view"><div className="title-row"><div><h1>折り返し対応</h1><p>対応が必要な会社をここでまとめて管理できるで。</p></div><div className="view-note">最終保存 {state.lastSaved}</div></div><FollowUpTable rows={rows} statusFilter={filter} setStatusFilter={setFilter} onPhone={onPhone} onMail={onMail} onComplete={onComplete} /></div>
+  return <div className="standalone-view"><div className="title-row"><div><h1>折り返し対応</h1><p>対応が必要な会社をここでまとめて管理できるで。</p></div><div className="view-note">最終保存 {state.lastSaved}</div></div><FollowUpTable rows={rows} statusFilter={filter} setStatusFilter={setFilter} onPhone={onPhone} onMail={onMail} onComplete={onComplete} onUpdateRow={onUpdateRow} /></div>
 }
 
 function HistoryView({ history, onOpen }) {
@@ -391,13 +392,17 @@ function App() {
     notify(`${row.company}を完了にしたで`)
   }
 
+  const updateFollowUpRow = (rowId, changes) => {
+    setState((previous) => ({ ...previous, followUps: previous.followUps.map((item) => item.id === rowId ? { ...item, ...changes } : item), lastSaved: currentTime() }))
+  }
+
   const actionToast = (message) => notify(message)
   const openDetail = (record) => setDetailRecord(record)
   const renderView = () => {
-    if (activeNav === 'followups') return <FollowUpView state={state} onComplete={completeFollowUp} onPhone={(row) => actionToast(`${row.company}へ電話する準備やで`)} onMail={(row) => actionToast(`${row.company}へのメールを開くで`)} />
+    if (activeNav === 'followups') return <FollowUpView state={state} onComplete={completeFollowUp} onPhone={(row) => actionToast(`${row.company}へ電話する準備やで`)} onMail={(row) => actionToast(`${row.company}へのメールを開くで`)} onUpdateRow={updateFollowUpRow} />
     if (activeNav === 'history') return <HistoryView history={state.history} onOpen={openDetail} />
     if (activeNav === 'report') return <ReportView state={state} />
-    return <Dashboard state={state} onResult={handleResultTap} onDoubleResult={handleResultDoubleTap} onSlideResult={handleResultSlide} onComplete={completeFollowUp} onPhone={(row) => actionToast(`${row.company}へ電話する準備やで`)} onMail={(row) => actionToast(`${row.company}へのメールを開くで`)} onJumpToResultPad={() => document.querySelector('.result-pad')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} onOpenHistory={openDetail} />
+    return <Dashboard state={state} onResult={handleResultTap} onDoubleResult={handleResultDoubleTap} onSlideResult={handleResultSlide} onComplete={completeFollowUp} onPhone={(row) => actionToast(`${row.company}へ電話する準備やで`)} onMail={(row) => actionToast(`${row.company}へのメールを開くで`)} onUpdateRow={updateFollowUpRow} onJumpToResultPad={() => document.querySelector('.result-pad')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} onOpenHistory={openDetail} />
   }
 
   return <div className="app-shell"><aside className={mobileMenuOpen ? 'sidebar open' : 'sidebar'}><div className="brand">TELENOTE</div><nav>{navItems.map((item) => <button key={item.id} className={activeNav === item.id ? 'nav-item active' : 'nav-item'} onClick={() => { setActiveNav(item.id); setMobileMenuOpen(false) }}><Icon name={item.icon} size={20} /><span>{item.label}</span></button>)}</nav><div className="sidebar-footer"><span className="save-dot" />自動保存オン</div></aside>
