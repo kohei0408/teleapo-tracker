@@ -92,7 +92,7 @@ function toHistoryRecord(record) {
 
 function rollToNewDay(previous, nextDayKey = getTodayKey()) {
   const archived = hasActivity(previous) ? [toHistoryRecord(previous), ...(previous.history || [])] : (previous.history || [])
-  return { ...emptyDayState(nextDayKey), history: archived.slice(0, 30) }
+  return { ...emptyDayState(nextDayKey), history: archived.slice(0, 366) }
 }
 
 function loadState() {
@@ -114,6 +114,32 @@ function currentTime() {
 
 function appointmentRate(record) {
   return Math.round(((record.resultCounts?.appointment || 0) / Math.max(record.metrics?.calls || 0, 1)) * 1000) / 10
+}
+
+function emptyAggregate() {
+  return {
+    metrics: { calls: 0, connected: 0 },
+    resultCounts: Object.fromEntries(resultOptions.map((option) => [option.value, 0])),
+    hourly: { calls: Array(8).fill(0), voicemail: Array(8).fill(0), positive: Array(8).fill(0) },
+  }
+}
+
+function aggregateRecords(records) {
+  return records.reduce((aggregate, record) => {
+    aggregate.metrics.calls += record.metrics?.calls || 0
+    aggregate.metrics.connected += record.metrics?.connected || 0
+    resultOptions.forEach((option) => {
+      aggregate.resultCounts[option.value] += record.resultCounts?.[option.value] || 0
+    })
+    ;['calls', 'voicemail', 'positive'].forEach((series) => {
+      aggregate.hourly[series] = aggregate.hourly[series].map((value, index) => value + (record.hourly?.[series]?.[index] || 0))
+    })
+    return aggregate
+  }, emptyAggregate())
+}
+
+function formatMonthLabel(dayKey) {
+  return new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(new Date(`${dayKey}T00:00:00`))
 }
 
 function StatCard({ label, value, tone }) {
@@ -317,9 +343,22 @@ function HistoryView({ history, onOpen }) {
   return <div className="standalone-view"><div className="title-row"><div><h1>過去の記録</h1><p>日ごとの架電数とアポイント率を振り返れるで。</p></div></div><HistorySection history={history} onOpen={onOpen} /></div>
 }
 
+function MonthlyResultGrid({ resultCounts }) {
+  return <div className="monthly-result-grid">{resultOptions.map((option) => <div className={`monthly-result ${option.tone}`} key={option.value}><span className="monthly-result-dot" /> <span>{option.label}</span><strong>{resultCounts[option.value] || 0}</strong></div>)}</div>
+}
+
 function ReportView({ state }) {
-  const connectionRate = Math.round((state.metrics.connected / Math.max(state.metrics.calls, 1)) * 100)
-  return <div className="standalone-view"><div className="title-row"><div><h1>実績レポート</h1><p>今日の活動を振り返って、次の一手を決める画面やで。</p></div><div className="view-note">自動保存済み</div></div><div className="report-grid"><div className="report-card"><span>出た件数</span><strong>{state.metrics.connected}</strong><small>会話につながった件数</small></div><div className="report-card"><span>接続率</span><strong>{connectionRate}%</strong><small>架電したうち、会話できた割合</small></div><div className="report-card"><span>アポ率</span><strong>{appointmentRate(state)}%</strong><small>アポ決定 ÷ 架電件数</small></div></div><section className="flow-panel report-flow"><div className="section-heading"><h2>時間帯別の架電数</h2></div><FlowChart hourly={state.hourly} /></section></div>
+  const currentMonth = state.dayKey.slice(0, 7)
+  const monthlyRecords = [state, ...(state.history || [])].filter((record) => record.dayKey?.startsWith(currentMonth))
+  const totals = aggregateRecords(monthlyRecords)
+  const connectionRate = Math.round((totals.metrics.connected / Math.max(totals.metrics.calls, 1)) * 100)
+  const monthLabel = formatMonthLabel(state.dayKey)
+  return <div className="standalone-view report-view">
+    <div className="title-row"><div><h1>今月の実績</h1><p>{monthLabel}1日〜{formatShortDate(state.dayKey)}の総実績</p></div><div className="view-note">{monthlyRecords.length}日分を集計・自動保存済み</div></div>
+    <div className="report-grid"><div className="report-card report-card-featured"><span>架電件数</span><strong>{totals.metrics.calls}</strong><small>今月の総架電数</small></div><div className="report-card"><span>出た件数</span><strong>{totals.metrics.connected}</strong><small>会話につながった件数</small></div><div className="report-card"><span>接続率</span><strong>{connectionRate}%</strong><small>架電したうち、会話できた割合</small></div><div className="report-card"><span>アポイント率</span><strong>{appointmentRate(totals)}%</strong><small>アポ決定 ÷ 架電件数</small></div></div>
+    <section className="report-breakdown"><div className="section-heading"><div><h2>今月の結果内訳</h2><p className="report-caption">架電結果ボタンで記録した件数の合計</p></div><span className="section-count">{monthlyRecords.length}日分</span></div><MonthlyResultGrid resultCounts={totals.resultCounts} /></section>
+    <section className="flow-panel report-flow"><div className="section-heading"><div><h2>今月の時間帯別集計</h2><p className="report-caption">日ごとの記録を時間帯別に合算</p></div></div><FlowChart hourly={totals.hourly} /></section>
+  </div>
 }
 
 function App() {
